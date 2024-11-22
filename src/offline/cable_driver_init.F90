@@ -99,6 +99,7 @@ CONTAINS
 
     INTEGER :: ioerror, unit
     CHARACTER(len=4) :: cRank ! for worker-logfiles
+    LOGICAL :: is_gswp_run
 
     !check to see if first argument passed to cable is
     !the name of the namelist file
@@ -186,6 +187,25 @@ CONTAINS
     END IF
 
     NRRRR = MERGE(MAX(cable_user%CASA_NREP,1), 1, CASAONLY)
+
+    is_gswp_run = ANY( &
+      [character(5) :: 'gswp', 'gswp3'] == TRIM(cable_user%MetType) &
+    )
+    IF (is_gswp_run .AND. cable_user%YearStart == 0) THEN
+      IF (ncciy == 0) THEN
+        IF (mpi_grp%rank == 0) THEN
+          PRINT*, 'undefined start year for gswp met: '
+          PRINT*, 'enter value for ncciy or'
+          PRINT*, '(CABLE_USER%YearStart and  CABLE_USER%YearEnd) in cable.nml'
+        END IF
+        WRITE(logn,*) 'undefined start year for gswp met: '
+        WRITE(logn,*) 'enter value for ncciy or'
+        WRITE(logn,*) '(CABLE_USER%YearStart and  CABLE_USER%YearEnd) in cable.nml'
+        STOP
+      END IF
+      cable_user%YearStart = ncciy
+      cable_user%YearEnd = ncciy
+    END IF
 
   END SUBROUTINE cable_driver_init
 
