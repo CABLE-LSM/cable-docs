@@ -33,10 +33,14 @@ MODULE cable_driver_init_mod
     CABLE_NAMELIST,               &
     arg_not_namelist
   USE cable_mpi_mod, ONLY : mpi_grp_t
+  USE cable_phys_constants_mod, ONLY : CTFRZ => TFRZ
+  USE cable_input_module, ONLY : open_met_file
   IMPLICIT NONE
   PRIVATE
 
   INTEGER, PARAMETER :: CASAONLY_ICYCLE_MIN = 10
+  INTEGER, PARAMETER :: N_MET_FORCING_VARIABLES_GSWP = 8
+    !! Number of GSWP met forcing variables (rain, snow, lw, sw, ps, qa, ta, wd)
 
   LOGICAL, SAVE, PUBLIC :: vegparmnew    = .FALSE. ! using new format input file (BP dec 2007)
   LOGICAL, SAVE, PUBLIC :: spinup        = .FALSE. ! model spinup to soil state equilibrium?
@@ -90,16 +94,20 @@ MODULE cable_driver_init_mod
 
 CONTAINS
 
-  SUBROUTINE cable_driver_init(mpi_grp, trunk_sumbal, NRRRR)
+  SUBROUTINE cable_driver_init(mpi_grp, trunk_sumbal, NRRRR, dels, koffset, kend, GSWP_MID)
     !! Model initialisation routine for the CABLE offline driver.
     TYPE(mpi_grp_t), INTENT(IN) :: mpi_grp !! MPI group to use
     DOUBLE PRECISION, INTENT(OUT) :: trunk_sumbal
       !! Reference value for quasi-bitwise reproducibility checks.
     INTEGER, INTENT(OUT) :: NRRRR !! Number of repeated spin-up cycles
+    REAL, INTENT(OUT) :: dels !! Time step size in seconds
+    INTEGER, INTENT(OUT) :: koffset !! Timestep to start at
+    INTEGER, INTENT(OUT) :: kend !! No. of time steps in run
+    INTEGER, ALLOCATABLE, INTENT(OUT) :: GSWP_MID(:,:) !! NetCDF file IDs for GSWP met forcing
 
     INTEGER :: ioerror, unit
     CHARACTER(len=4) :: cRank ! for worker-logfiles
-    LOGICAL :: is_gswp_run
+    LOGICAL :: is_gswp_run, is_non_gswp_run
 
     !check to see if first argument passed to cable is
     !the name of the namelist file
@@ -209,6 +217,30 @@ CONTAINS
       END IF
       cable_user%YearStart = ncciy
       cable_user%YearEnd = ncciy
+    END IF
+
+    IF (TRIM(cable_user%MetType) == 'site' .AND. (.NOT. l_casacnp)) THEN
+      WRITE(*,*) "MetType=site only works with CASA-CNP turned on"
+      STOP 991
+    END IF
+
+    ! Open met data and get site information from netcdf file. (NON-GSWP ONLY!)
+    ! This retrieves time step size, number of timesteps, starting date,
+    ! latitudes, longitudes, number of sites.
+    is_non_gswp_run = ANY( &
+      [character(4) :: 'site', ''] == TRIM(cable_user%MetType) &
+    )
+    IF (is_non_gswp_run) THEN
+      CALL open_met_file(dels, koffset, kend, spinup, CTFRZ)
+      IF (koffset /= 0 .AND. cable_user%CALL_POP) THEN
+        WRITE(*,*) "When using POP, episode must start at Jan 1st!"
+        STOP 991
+      END IF
+    ELSE IF (NRRRR > 1 .AND. (.NOT. ALLOCATED(GSWP_MID))) THEN
+      ! TODO(Sean): allocation of GSWP_MID is only required if
+      ! cable_user%MetType == 'gswp' so this shouldn't really be in an ELSE IF
+      ! block
+      ALLOCATE(GSWP_MID(N_MET_FORCING_VARIABLES_GSWP, cable_user%YearStart:cable_user%YearEnd))
     END IF
 
   END SUBROUTINE cable_driver_init
