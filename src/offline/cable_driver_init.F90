@@ -25,7 +25,8 @@ MODULE cable_driver_init_mod
     ncciy,                         &
     gswpfile,                      &
     globalMetfile,                 &
-    set_group_output_values
+    set_group_output_values,       &
+    timeunits
   USE casadimension, ONLY : icycle
   USE casavariable, ONLY : casafile
   USE cable_namelist_util, ONLY : &
@@ -35,6 +36,7 @@ MODULE cable_driver_init_mod
   USE cable_mpi_mod, ONLY : mpi_grp_t
   USE cable_phys_constants_mod, ONLY : CTFRZ => TFRZ
   USE cable_input_module, ONLY : open_met_file
+  USE CABLE_PLUME_MIP, ONLY : PLUME_MIP_TYPE, PLUME_MIP_INIT
   IMPLICIT NONE
   PRIVATE
 
@@ -94,7 +96,7 @@ MODULE cable_driver_init_mod
 
 CONTAINS
 
-  SUBROUTINE cable_driver_init(mpi_grp, trunk_sumbal, NRRRR, dels, koffset, kend, GSWP_MID)
+  SUBROUTINE cable_driver_init(mpi_grp, trunk_sumbal, NRRRR, dels, koffset, kend, GSWP_MID, PLUME)
     !! Model initialisation routine for the CABLE offline driver.
     TYPE(mpi_grp_t), INTENT(IN) :: mpi_grp !! MPI group to use
     DOUBLE PRECISION, INTENT(OUT) :: trunk_sumbal
@@ -104,9 +106,11 @@ CONTAINS
     INTEGER, INTENT(OUT) :: koffset !! Timestep to start at
     INTEGER, INTENT(OUT) :: kend !! No. of time steps in run
     INTEGER, ALLOCATABLE, INTENT(OUT) :: GSWP_MID(:,:) !! NetCDF file IDs for GSWP met forcing
+    TYPE(PLUME_MIP_TYPE), INTENT(OUT) :: PLUME
 
     INTEGER :: ioerror, unit
     CHARACTER(len=4) :: cRank ! for worker-logfiles
+    CHARACTER(len=9) :: str1, str2, str3
     LOGICAL :: is_gswp_run, is_non_gswp_run
 
     !check to see if first argument passed to cable is
@@ -241,6 +245,21 @@ CONTAINS
       ! cable_user%MetType == 'gswp' so this shouldn't really be in an ELSE IF
       ! block
       ALLOCATE(GSWP_MID(N_MET_FORCING_VARIABLES_GSWP, cable_user%YearStart:cable_user%YearEnd))
+    END IF
+
+    IF (TRIM(cable_user%MetType) == 'plum') THEN
+      ! PLUME experiment setup using WATCH
+      CALL PLUME_MIP_INIT(PLUME)
+      dels = PLUME%dt
+      koffset = 0
+      leaps = PLUME%LeapYears
+      WRITE(str1,'(i4)') cable_user%YearStart
+      str1 = ADJUSTL(str1)
+      WRITE(str2,'(i2)') 1
+      str2 = ADJUSTL(str2)
+      WRITE(str3,'(i2)') 1
+      str3 = ADJUSTL(str3)
+      timeunits="seconds since "//TRIM(str1)//"-"//TRIM(str2)//"-"//TRIM(str3)//"00:00"
     END IF
 
   END SUBROUTINE cable_driver_init

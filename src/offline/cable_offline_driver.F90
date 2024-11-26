@@ -7,6 +7,7 @@ PROGRAM cable_offline_driver
   USE cable_serial
   USE cable_mpimaster
   USE cable_mpiworker
+  USE CABLE_PLUME_MIP, ONLY : PLUME_MIP_TYPE
 
   IMPLICIT NONE
 
@@ -19,17 +20,18 @@ PROGRAM cable_offline_driver
   INTEGER :: koffset = 0 !! Timestep to start at
   INTEGER :: kend !! No. of time steps in run
   INTEGER, ALLOCATABLE :: GSWP_MID(:,:) !! NetCDF file IDs for GSWP met forcing
+  TYPE(PLUME_MIP_TYPE) :: PLUME
 
   call mpi_mod_init()
   mpi_grp = mpi_grp_t()
 
-  CALL cable_driver_init(mpi_grp, trunk_sumbal, NRRRR, dels, koffset, kend, GSWP_MID)
+  CALL cable_driver_init(mpi_grp, trunk_sumbal, NRRRR, dels, koffset, kend, GSWP_MID, PLUME)
 
   IF (mpi_grp%size == 1) THEN
-    CALL serialdrv(trunk_sumbal, NRRRR, dels, koffset, kend, GSWP_MID)
+    CALL serialdrv(trunk_sumbal, NRRRR, dels, koffset, kend, GSWP_MID, PLUME)
   ELSE
     IF (mpi_grp%rank == 0) THEN
-      CALL mpidrv_master(mpi_grp%comm, trunk_sumbal, dels, koffset, kend)
+      CALL mpidrv_master(mpi_grp%comm, trunk_sumbal, dels, koffset, kend, PLUME)
     ELSE
       CALL mpidrv_worker(mpi_grp%comm)
     END IF
