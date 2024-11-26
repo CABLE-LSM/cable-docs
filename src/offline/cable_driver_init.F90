@@ -26,7 +26,8 @@ MODULE cable_driver_init_mod
     gswpfile,                      &
     globalMetfile,                 &
     set_group_output_values,       &
-    timeunits
+    timeunits,                     &
+    exists
   USE casadimension, ONLY : icycle
   USE casavariable, ONLY : casafile
   USE cable_namelist_util, ONLY : &
@@ -37,6 +38,7 @@ MODULE cable_driver_init_mod
   USE cable_phys_constants_mod, ONLY : CTFRZ => TFRZ
   USE cable_input_module, ONLY : open_met_file
   USE CABLE_PLUME_MIP, ONLY : PLUME_MIP_TYPE, PLUME_MIP_INIT
+  USE CABLE_CRU, ONLY : CRU_TYPE, CRU_INIT
   IMPLICIT NONE
   PRIVATE
 
@@ -96,7 +98,7 @@ MODULE cable_driver_init_mod
 
 CONTAINS
 
-  SUBROUTINE cable_driver_init(mpi_grp, trunk_sumbal, NRRRR, dels, koffset, kend, GSWP_MID, PLUME)
+  SUBROUTINE cable_driver_init(mpi_grp, trunk_sumbal, NRRRR, dels, koffset, kend, GSWP_MID, PLUME, CRU)
     !! Model initialisation routine for the CABLE offline driver.
     TYPE(mpi_grp_t), INTENT(IN) :: mpi_grp !! MPI group to use
     DOUBLE PRECISION, INTENT(OUT) :: trunk_sumbal
@@ -107,6 +109,7 @@ CONTAINS
     INTEGER, INTENT(OUT) :: kend !! No. of time steps in run
     INTEGER, ALLOCATABLE, INTENT(OUT) :: GSWP_MID(:,:) !! NetCDF file IDs for GSWP met forcing
     TYPE(PLUME_MIP_TYPE), INTENT(OUT) :: PLUME
+    TYPE(CRU_TYPE), INTENT(OUT) :: CRU
 
     INTEGER :: ioerror, unit
     CHARACTER(len=4) :: cRank ! for worker-logfiles
@@ -261,6 +264,24 @@ CONTAINS
       str3 = ADJUSTL(str3)
       timeunits="seconds since "//TRIM(str1)//"-"//TRIM(str2)//"-"//TRIM(str3)//"00:00"
     END IF
+
+    IF (TRIM(cable_user%MetType) == 'cru') THEN
+      ! TRENDY experiment using CRU-NCEP
+      CALL CRU_INIT(CRU)
+      dels = CRU%dtsecs
+      koffset = 0
+      leaps = .FALSE. ! No leap years in CRU-NCEP
+      exists%Snowf = .FALSE.
+        ! No snow in CRU-NCEP, so ensure it will be determined from temperature
+        ! in CABLE
+      WRITE(str1,'(i4)') cable_user%YearStart
+      str1 = ADJUSTL(str1)
+      WRITE(str2,'(i2)') 1
+      str2 = ADJUSTL(str2)
+      WRITE(str3,'(i2)') 1
+      str3 = ADJUSTL(str3)
+      timeunits="seconds since "//TRIM(str1)//"-"//TRIM(str2)//"-"//TRIM(str3)//"00:00"
+    ENDIF
 
   END SUBROUTINE cable_driver_init
 
